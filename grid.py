@@ -79,6 +79,7 @@ def sor(x, y):
         show_grid(x, y, t)
         for i in range(0, xn):
             if (i == xn-1):
+                # duplicate the frist line in the last
                 x = np.vstack([x, x[0,:]])
                 y = np.vstack([y, y[0,:]])
             for j in range(1, yn-1):
@@ -106,6 +107,7 @@ def sor(x, y):
                 x[i,j] += err_x * omega
                 y[i,j] += err_y * omega
             if (i == xn-1):
+                # delete the duplicate line
                 x = x[:-1,:]
                 y = y[:-1,:]
                 
@@ -118,8 +120,8 @@ t  = 0.12
 xn = 81
 yn = 21
 
-omega = 1.5
-tmax = 300
+omega = 1.5 # relaxation parameter
+tmax = 100
 
 xa, ya = airfoil()
 x, y = init_grid()
