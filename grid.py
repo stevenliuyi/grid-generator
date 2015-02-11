@@ -67,9 +67,141 @@ def show_grid(x, y, t):
         ylines[i].set_xdata(x[i,:])
         ylines[i].set_ydata(y[i,:])
 
-    ax.set_title('t = ' + str(t))
+    ax.set_title(method.upper() + ' (t = ' + str(t) + ')')
     fig.canvas.draw()
     return
+
+# -----------------------------------------------------------------------------
+# Thomas algorithm
+def thomas(A, B, C, D):
+    a = np.insert(A, 0, 0)
+    b = B
+    c = C.copy()
+    d = D.copy()
+
+    n = len(b)
+    
+    # forward
+    c[0] /= b[0]
+    for i in range(1, n-1):
+        c[i] /= (b[i] - a[i]*c[i-1])
+    d[0] /= b[0]
+    for i in range(1, n):
+        d[i] = (d[i] - a[i]*d[i-1]) / (b[i] - a[i]*c[i-1])
+
+    # backward substitution
+    x = np.zeros(n)
+    x[n-1] = d[n-1]
+    for i in range(n-2, -1, -1):
+        x[i] = d[i] - c[i]*x[i+1]
+    return x
+
+# -----------------------------------------------------------------------------
+# Alternating-Direction Implicit
+def adi(x, y):
+    for t in range(0, tmax):
+        show_grid(x, y, t)
+
+        # first half-step (xi-direction implicit)
+        for j in range(1, yn-1):
+            # initialization
+            A  = np.zeros(xn-1)
+            B  = np.zeros(xn)
+            C  = np.zeros(xn-1)
+            Dx = np.zeros(xn)
+            Dy = np.zeros(xn)
+            for i in range(0, xn):
+                if (i == xn-1):
+                    # duplicate the frist line in the last
+                    x = np.vstack([x, x[0,:]])
+                    y = np.vstack([y, y[0,:]])
+
+                deta  = np.sqrt((x[i,j]-x[i,j-1])**2 + (y[i,j]-y[i,j-1])**2)
+                dxi   = np.sqrt((x[i,j]-x[i-1,j])**2 + (y[i,j]-y[i-1,j])**2)
+                xeta  = (x[i,j+1] - x[i,j-1]) / (2*deta)
+                yeta  = (y[i,j+1] - y[i,j-1]) / (2*deta)
+                xxi   = (x[i+1,j] - x[i-1,j]) / (2*dxi)
+                yxi   = (y[i+1,j] - y[i-1,j]) / (2*dxi)
+                x2    = (x[i+1,j+1]-x[i+1,j-1]-x[i-1,j+1]+x[i-1,j-1]) \
+                        / (4*deta*dxi)
+                y2    = (y[i+1,j+1]-y[i+1,j-1]-y[i-1,j+1]+y[i-1,j-1]) \
+                        / (4*deta*dxi)
+                a     = xeta**2 + yeta**2
+                b     = xxi*xeta + yxi*yeta
+                c     = xxi**2 + yxi**2
+
+                if (i != 0   ): A[i-1] = a * deta**2
+                if (i != xn-1): C[i]   = a * deta**2
+                B[i]  = -2*(a * deta**2 + c * dxi**2)
+                Dx[i] = 2*b*deta**2*dxi**2*x2 - c*dxi**2*(x[i,j+1]+x[i,j-1]) 
+                Dy[i] = 2*b*deta**2*dxi**2*y2 - c*dxi**2*(y[i,j+1]+y[i,j-1]) 
+                if (i == 0):
+                    Dx[i] -= a * deta**2 * x[i-1,j]
+                    Dy[i] -= a * deta**2 * y[i-1,j]
+                if (i == xn-1):
+                    Dx[i] -= a * deta**2 * x[i+1,j]
+                    Dy[i] -= a * deta**2 * y[i+1,j]
+                
+                if (i == xn-1):
+                    # delete the duplicate line
+                    x = x[:-1,:]
+                    y = y[:-1,:]
+            # use Thomas algorithm to solve the matrix
+            x[:, j] = thomas(A, B, C, Dx)
+            y[:, j] = thomas(A, B, C, Dy)
+
+        # second half-step (eta-direction implicit)
+        for i in range(0, xn):
+            if (i == xn-1):
+                # duplicate the frist line in the last
+                x = np.vstack([x, x[0,:]])
+                y = np.vstack([y, y[0,:]])
+            # initialization
+            A  = np.zeros(yn-1)
+            B  = np.zeros(yn)
+            C  = np.zeros(yn-1)
+            Dx = np.zeros(yn)
+            Dy = np.zeros(yn)
+            # j = 0 (airfoil boundary)
+            B[0]  = 1
+            C[0]  = 0
+            Dx[0] = x[i,0]
+            Dy[0] = y[i,0]
+            # j = yn-1 (domain boundary)
+            A[yn-2]  = 0
+            B[yn-1]  = 1
+            Dx[yn-1] = x[i,yn-1]
+            Dy[yn-1] = y[i,yn-1]
+            for j in range(1, yn-1):
+                deta  = np.sqrt((x[i,j]-x[i,j-1])**2 + (y[i,j]-y[i,j-1])**2)
+                dxi   = np.sqrt((x[i,j]-x[i-1,j])**2 + (y[i,j]-y[i-1,j])**2)
+                xeta  = (x[i,j+1] - x[i,j-1]) / (2*deta)
+                yeta  = (y[i,j+1] - y[i,j-1]) / (2*deta)
+                xxi   = (x[i+1,j] - x[i-1,j]) / (2*dxi)
+                yxi   = (y[i+1,j] - y[i-1,j]) / (2*dxi)
+                x2    = (x[i+1,j+1]-x[i+1,j-1]-x[i-1,j+1]+x[i-1,j-1]) \
+                        / (4*deta*dxi)
+                y2    = (y[i+1,j+1]-y[i+1,j-1]-y[i-1,j+1]+y[i-1,j-1]) \
+                        / (4*deta*dxi)
+                a     = xeta**2 + yeta**2
+                b     = xxi*xeta + yxi*yeta
+                c     = xxi**2 + yxi**2
+
+                A[j-1] = c * dxi**2
+                C[j]   = c * dxi**2
+                B[j]  = -2*(a * deta**2 + c * dxi**2)
+                Dx[j] = 2*b*deta**2*dxi**2*x2 - a*deta**2*(x[i+1,j]+x[i-1,j]) 
+                Dy[j] = 2*b*deta**2*dxi**2*y2 - a*deta**2*(y[i+1,j]+y[i-1,j]) 
+                
+            if (i == xn-1):
+                # delete the duplicate line
+                x = x[:-1,:]
+                y = y[:-1,:]
+
+            # use Thomas algorithm to solve the matrix
+            x[i, :] = thomas(A, B, C, Dx)
+            y[i, :] = thomas(A, B, C, Dy)
+    return x, y
 
 
 # -----------------------------------------------------------------------------
@@ -113,6 +245,11 @@ def sor(x, y):
                 
     return x, y
 
+# -----------------------------------------------------------------------------
+# main program
+
+method = "adi"
+
 # parameters
 m  = 0.04
 p  = 0.4
@@ -142,4 +279,8 @@ for i in range(0, xn):
 
 fig.show()
 
-x, y = sor(x, y)
+# iteration
+if (method == "sor"):
+    x, y = sor(x, y)
+elif (method == "adi"):
+    x, y = adi(x, y)
